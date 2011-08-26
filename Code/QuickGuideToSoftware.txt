@@ -1,0 +1,140 @@
+Hello!
+
+This is just going to be a very quick guide to the different
+pieces of code that I have created.
+
+I have arranged it in terms of tasks:
+
+TASK 1: Calculate the spectrum of tight-binding on lattice with
+mag field perpendicular:
+
+Use: ./solve_BH.sh N Q G K 
+
+N=number of particles
+Q = denominator of flux (P is assumed to be 1)
+G = force of interactions
+K = size of lattice
+(BH stands for bose hubbard)
+
+The shell script does two things. It will first generate
+the basis states using bstate.f90. The basis states are the
+fock space of the system. More information in README.txt.
+
+After it does that, it will solve the Harper's equations to
+obtain the spectrum. It will call the fortran code hof_solver_int.f90
+	hofstatder solver with interactions
+
+OUTPUT: eig_Q_N_G_K_real.dat eig_Q_N_G_K_imag.dat
+
+	_real.dat stores the real part of the answers
+	_imag.dat stores the imaginary.
+
+	The format of the data looks like this:
+	[1/Q][k_x][k_y][eigenvalue][Re(Im) of eigenvector]
+
+
+	####################
+
+Task 2: Calculate the current operator for tight-binding on lattice
+with mag field perpendicular.
+
+Use: ./solve_current.sh N Q G K
+
+N=number of particles
+Q = denominator of flux (P is assumed to be 1)
+G = force of interactions
+K = size of lattice
+
+It operates exactly like ./solve_BH.sh, except it calls current_cal.f90
+which is almost exactly the same of hof_solver_int.f90, but it has
+the terms in the matrix changes to be the current operator. Derivation is in the report! And it isn't solved. 
+
+OUTPUT: current_Q_N_G_K_real.dat, current_Q_N_G_K_imag.dat
+
+FORMAT: [1/Q][kx_i][ky_i][ Jmatrix row]
+		[1/Q][.   ][  . ][ Jmatrix row]
+		[1/Q][.   ][  . ][ Jmatrix row]
+		[1/Q][.   ][  . ][ Jmatrix row]
+		[1/Q][kx_i   ][  ky_{i+1} ][ New Jmatrix row]
+
+		if that isn't clear, each kx, ky pair will generate a
+			jmatrix. The kx, ky pair labels the matrix, so
+			they neccesarily repeat.
+
+
+################################
+
+Task 3:
+
+Calculate the hall effect using fermi statistics:
+USE: kubo_v2.py END_FERMI Q K G N
+END_FERMI is the highest fermi level you want to go to
+Q is the flux (P is assumed to be 1)
+K is the size of the system
+G is the interaction strength (usually taken to be 0, untested)
+N is the number of particles. This is just a silly thing, I should get
+rid of it. N isn't conserved as you are increasing the fermi level. Just enter some integer (1 for instance).
+
+Also, you can manually change the number of data points you want by
+going to the line that defines the variable itr.
+itr = abs(END_FERMI-lowestEnergyLevel)/30
+
+Just divide by the number of data points you want!
+
+
+It is fairly simple. It checks a folder called Res to see if you
+have the data files it needs (eig_real(imag).dat) and current_real(imag).dat. If you do have them, then it reads those in and starts calculating the hall current using the kubo formula. It iterates over all the eigenvectors whose energy is lower than the fermi level and calculates their contribution.
+It iterates over the lowestEnergyLevel to END_FERMI and gives you
+a hall current at each step.
+
+OUTPUT:
+There are two major outputs. The main one is a data file called
+kubo_fermi.dat. It holds the [temp][hall current] matrix.
+
+The python program also calculate the occupation of each energy level using fermi statistics at zero temp and outputs those. They have the identifying tag F3* and will contain the energy level in the file name.
+
+Task 4:
+Calculate the hall effect using boson statistics:
+Use: kubo_bosev2.py END_TEMP Q K G N
+END_TEMP is the end temperature you want to go to
+Q is the denominator of the flux (P is assumed to be 1)
+K is the length of the lattice
+G is the interaction strength (Not tested and will not work if G \neq 0!!!!!!)
+N is the number of particles.
+
+It operates similarily to kubo_v2.py, but now it has to use bose
+statistics, and instead of increasing the number of particles, you are
+increasing the temperature and holding the number of particles fixed.
+
+However, because of the way I did things, you need to have the
+eig_real(imag) and current_real(imag) files for the N you are calculating, AND EVERY N BELOW THAT.
+
+The structure of the program is a little weird, but it first calls bstate.f90 to find out all the ways of distributing N particles in U number
+of eigenstates. (Where the eigenstates are the single particle eigenstates). bstate will then return the fock basis of the N particle system. The N particle spectrum will be the direct product between the fock bass and the single particle.
+So each row returned by bstate will be a unique eigenvector of our sytem, so I sum over those for the kubo calculation.
+
+However, there is some subleties as the basis that the eig_real(imag) are in is NOT the basis of the eigenvector that bstate returned. It is analogous to the Clebsh-Gordon coefficients. So what I do is I block off
+the eigenvector into blocks of (N, kx,ky). This allows me to use the
+data files eig_real(imag) for each given N. 
+
+Basically, what I do is I match up each block in the bstate eigenvector to a data file eig_real(imag), and then sum over all the blocks.
+
+This method will not work for all cases, as it revolves around the idea that there is one-to-one matching between a bstate eigenvector block
+and an eigenvector present in the eig_real(imag) data file. This isn't generally true. If the program ever finds that there isn't a one-one matching, it will raise an exception.
+
+
+OUTPUT:
+The output is similar to kubo_v2.py. Counter intuitively, the main
+output is called kubo_fermi.dat, even though it is a bose system. This
+was just an oversight on my part, so you can't trust any stray kubo_fermi.dat file. They are always bundled into a labelled director though.
+
+I also calculate the occupation and probality of the bose system
+as temperature is increased. These are stored in data files labelled by
+F and the energy.
+
+However, I also amalgamate energy levels that are in the same subband
+together, to calculate an 'ensemble' occupation and probability. These
+are labelled with the tag S and contained a rounded number corresponding to the subband.
+
+
+Thanks again!
